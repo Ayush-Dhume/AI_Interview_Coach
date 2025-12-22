@@ -7,9 +7,6 @@ import os
 from dotenv import load_dotenv
 from streamlit_mic_recorder import mic_recorder
 from gtts import gTTS
-import speech_recognition as sr
-import io
-
 load_dotenv()
 
 
@@ -97,36 +94,60 @@ audio_input = mic_recorder(
 
 # Logic to handle Audio Input
 if audio_input and 'bytes' in audio_input:
-    # A. Transcribe User Audio (Using Free Google API)
-    user_text = transcribe_audio(audio_input['bytes'])
+    # Rate limiting check
+    if 'last_request_time' not in st.session_state:
+        st.session_state.last_request_time = 0
     
-    if user_text:
-        st.session_state.chat_history.append(HumanMessage(content=user_text))
-        with st.chat_message("user"):
-            st.write(user_text)
-
-        # B. AI Logic (Gemini is already free-tier friendly)
-        system_prompt = SystemMessage(content=f"""
-
-    You are an expert Interviewer. You have to take the interview of the user based on his job profile. Get the user's job profile from the resume context: {st.session_state.resume_text}.
-
-    Rule 1: See for the user's expertise, tools, projects and perpare the questionaire likely.
-
-    Rule 2: Importantly do check for his projects finding the most relative project for his job profile and then ask him to describe the project. Wait for the user's answer then ask atleast 5-6 follow-up questions waiting for user's answer after each to confirm his understanding on the project.
-
-    Rule 3: After 5-6 technical follow-ups, switch to HR questions.
-
-    """)
+    import time
+    current_time = time.time()
+    if current_time - st.session_state.last_request_time < 3:  # 3 second cooldown
+        st.warning("Please wait 3 seconds between requests to avoid rate limits.")
+    else:
+        # A. Transcribe User Audio
+        user_text = transcribe_audio(audio_input['bytes'])
         
-        full_messages = [system_prompt] + st.session_state.chat_history
+        if user_text and not user_text.startswith("Audio"):
+            st.session_state.chat_history.append(HumanMessage(content=user_text))
+            with st.chat_message("user"):
+                st.write(user_text)
+            
+            st.session_state.last_request_time = current_time
 
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        response = llm.invoke(full_messages)
-        
-        st.session_state.chat_history.append(AIMessage(content=response.content))
-        with st.chat_message("assistant"):
-            st.write(response.content)
+        # B. AI Logic with rate limiting
+        try:
+            system_prompt = SystemMessage(content=f"""
+            You are an expert Interviewer. You have to take the interview of the user based on his job profile. Get the user's job profile from the resume context: {st.session_state.resume_text}.
 
-        # C. Output Audio (Free gTTS)
-        audio_file_path = text_to_speech(response.content)
-        st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+            Rule 1: See for the user's expertise, tools, projects and prepare the questionnaire likely.
+            Rule 2: Ask him to describe the project. Wait for the user's answer then ask at least 5-6 follow-up questions waiting for user's answer after each to confirm his understanding on the project.
+            Rule 3: After 5-6 technical follow-ups, switch to HR questions.
+            """)
+            
+            full_messages = [system_prompt] + st.session_state.chat_history
+
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
+            
+            # Add retry logic for rate limits
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = llm.invoke(full_messages)
+                    break
+                except Exception as e:
+                    if "rate limit" in str(e).lower() and attempt < max_retries - 1:
+                        st.warning(f"Rate limit hit, retrying in {2**attempt} seconds...")
+                        time.sleep(2**attempt)  # Exponential backoff
+                    else:
+                        raise e
+            
+            st.session_state.chat_history.append(AIMessage(content=response.content))
+            with st.chat_message("assistant"):
+                st.write(response.content)
+
+            # C. Output Audio (Free gTTS) - Optional
+            # audio_file_path = text_to_speech(response.content)
+            # st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+            
+        except Exception as e:
+            st.error(f"AI processing error: {str(e)}")
+            st.info("Please try again in a few moments.")
