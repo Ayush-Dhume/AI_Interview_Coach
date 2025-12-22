@@ -5,6 +5,6 @@ streamlit-mic-recorder
 gtts
 SpeechRecognition
 openai-whisper
-PyPDF2
+pypdf
 python-dotenv
 langchain-core
