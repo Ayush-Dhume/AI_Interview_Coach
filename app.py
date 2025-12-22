@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 import tempfile
 from langchain_community.document_loaders import PyPDFLoader
@@ -9,8 +9,6 @@ from streamlit_mic_recorder import mic_recorder
 from gtts import gTTS
 load_dotenv()
 
-
-os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
 # --- Helper Functions ---
 
@@ -125,7 +123,11 @@ if audio_input and 'bytes' in audio_input:
             
             full_messages = [system_prompt] + st.session_state.chat_history
 
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
+            grok_api = os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
+            llm = ChatGroq(
+                model="llama-3.3-70b-versatile",
+                api_key=grok_api
+            )
             
             # Add retry logic for rate limits
             max_retries = 3
@@ -145,8 +147,8 @@ if audio_input and 'bytes' in audio_input:
                 st.write(response.content)
 
             # C. Output Audio (Free gTTS) - Optional
-            # audio_file_path = text_to_speech(response.content)
-            # st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+            audio_file_path = text_to_speech(response.content)
+            st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
             
         except Exception as e:
             st.error(f"AI processing error: {str(e)}")
