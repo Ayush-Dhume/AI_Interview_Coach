@@ -1,7 +1,7 @@
 # AI Interview Coach Documentation
 
 ## Overview
-The AI Interview Coach is a voice-enabled Streamlit application that conducts mock interviews based on your resume. It uses Google's Gemini AI to ask relevant questions and provide feedback, with speech-to-text and text-to-speech capabilities for a natural conversation experience.
+The AI Interview Coach is a voice-enabled Streamlit application that conducts mock interviews based on your resume. It uses Groq AI to ask relevant questions and provide feedback, with speech-to-text and text-to-speech capabilities for a natural conversation experience.
 
 ## How It Works
 
